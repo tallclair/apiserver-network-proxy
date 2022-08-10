@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client"
 )
@@ -98,19 +100,13 @@ const haServerCount = 3
 
 func setupHAProxyServer(t *testing.T) ([]proxy, []func()) {
 	proxy1, _, cleanup1, err := runGRPCProxyServerWithServerCount(haServerCount)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	proxy2, _, cleanup2, err := runGRPCProxyServerWithServerCount(haServerCount)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	proxy3, _, cleanup3, err := runGRPCProxyServerWithServerCount(haServerCount)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return []proxy{proxy1, proxy2, proxy3}, []func(){cleanup1, cleanup2, cleanup3}
 }
 
@@ -135,9 +131,7 @@ func TestBasicHAProxyServer_GRPC(t *testing.T) {
 
 	clientset := runAgent(lbAddr, stopCh)
 	waitForConnectedServerCount(t, 3, clientset)
-	if cc := clientset.ClientsCount(); cc != 3 {
-		t.Fatalf("Expected 3 clients, got %d", cc)
-	}
+	require.Equalf(t, 3, clientset.ClientsCount(), "ClientsCount")
 
 	// run test client
 	testProxyServer(t, proxy[0].front, server.URL)
@@ -154,9 +148,7 @@ func TestBasicHAProxyServer_GRPC(t *testing.T) {
 	waitForConnectedServerCount(t, 2, clientset)
 
 	proxy4, _, cleanup4, err := runGRPCProxyServerWithServerCount(haServerCount)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	lb.addBackend(proxy4.agent)
 	defer func() {
 		cleanups[1]()
@@ -166,9 +158,7 @@ func TestBasicHAProxyServer_GRPC(t *testing.T) {
 
 	// wait for the new server to be connected.
 	waitForConnectedServerCount(t, 3, clientset)
-	if cc := clientset.ClientsCount(); cc != 3 && cc != 4 {
-		t.Fatalf("Expected 3 or 4 clients, got %d", cc)
-	}
+	require.Containsf(t, []int{3, 4}, clientset.ClientsCount(), "Expected ClientsCount to be 3 or 4")
 
 	// run test client
 	testProxyServer(t, proxy[1].front, server.URL)
@@ -179,9 +169,7 @@ func TestBasicHAProxyServer_GRPC(t *testing.T) {
 func testProxyServer(t *testing.T, front string, target string) {
 	ctx := context.Background()
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -191,16 +179,10 @@ func testProxyServer(t *testing.T, front string, target string) {
 	}
 
 	r, err := c.Get(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
-	if string(data) != "hello" {
-		t.Errorf("expect %v; got %v", "hello", string(data))
-	}
+	assert.EqualValues(t, "hello", data)
 }

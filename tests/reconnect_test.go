@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -30,9 +31,7 @@ func TestClientReconnects(t *testing.T) {
 	svr := grpc.NewServer()
 	agentproto.RegisterAgentServiceServer(svr, s)
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	go func() {
 		if err := svr.Serve(lis); err != nil {
 			panic(err)
@@ -52,9 +51,7 @@ func TestClientReconnects(t *testing.T) {
 	svr.Stop()
 
 	lis2, err := net.Listen("tcp", lis.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	svr2 := grpc.NewServer()
 	agentproto.RegisterAgentServiceServer(svr2, s)
 	go func() {

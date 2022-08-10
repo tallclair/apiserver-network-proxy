@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client"
@@ -43,9 +45,7 @@ func (s *simpleServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func getTestClient(front string, t *testing.T) *http.Client {
 	ctx := context.Background()
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	return &http.Client{
 		Transport: &http.Transport{
@@ -120,9 +120,7 @@ func TestConcurrentClientRequest(t *testing.T) {
 	defer s.Close()
 
 	proxy, ps, cleanup, err := runGRPCProxyServerWithServerCount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 	ps.BackendManagers = []server.BackendManager{newSingleTimeGetter(server.NewDefaultBackendManager())}
 
@@ -141,36 +139,26 @@ func TestConcurrentClientRequest(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		r, err := client1.Post(s.URL, "text/plain", bytes.NewBufferString("1"))
-		if err != nil {
-			t.Error(err)
+		if !assert.NoError(t, err) {
 			return
 		}
 		data, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, err)
 		r.Body.Close()
 
-		if string(data) != "1" {
-			t.Errorf("expect %v; got %v", "1", string(data))
-		}
+		assert.EqualValues(t, data, "1")
 	}()
 	go func() {
 		defer wg.Done()
 		r, err := client2.Post(s.URL, "text/plain", bytes.NewBufferString("2"))
-		if err != nil {
-			t.Error(err)
+		if !assert.NoError(t, err) {
 			return
 		}
 		data, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, err)
 		r.Body.Close()
 
-		if string(data) != "2" {
-			t.Errorf("expect %v; got %v", "2", string(data))
-		}
+		assert.EqualValues(t, data, "2")
 	}()
 	wg.Wait()
 }

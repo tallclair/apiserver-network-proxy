@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client"
 )
@@ -44,9 +46,7 @@ func TestProxy_Agent_Disconnect_HTTP_Persistent_Connection(t *testing.T) {
 			stopCh := make(chan struct{})
 
 			proxy, cleanup, err := tc.proxyServerFunction()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			defer cleanup()
 
 			runAgent(proxy.agent, stopCh)
@@ -55,15 +55,10 @@ func TestProxy_Agent_Disconnect_HTTP_Persistent_Connection(t *testing.T) {
 			// run test client
 
 			c, err := tc.clientFunction(ctx, proxy.front, server.URL)
-			if err != nil {
-				t.Errorf("error obtaining client: %v", err)
-			}
+			require.NoErrorf(t, err, "obtaining client")
 
 			_, err = clientRequest(c, server.URL)
-
-			if err != nil {
-				t.Errorf("expected no error on proxy request, got %v", err)
-			}
+			assert.NoErrorf(t, err, "on proxy request")
 			close(stopCh)
 
 			// Wait for the agent to disconnect
@@ -71,11 +66,8 @@ func TestProxy_Agent_Disconnect_HTTP_Persistent_Connection(t *testing.T) {
 
 			// Reuse same client to make the request
 			_, err = clientRequest(c, server.URL)
-			if err == nil {
-				t.Errorf("expect request using http persistent connections to fail after dialing on a broken connection")
-			} else if os.IsTimeout(err) {
-				t.Errorf("expect request using http persistent connections to fail with error use of closed network connection. Got timeout")
-			}
+			assert.Errorf(t, err, "expect request using http persistent connections to fail after dialing on a broken connection")
+			assert.Falsef(t, os.IsTimeout(err), "expect request using http persistent connections to fail with error use of closed network connection. Got timeout")
 		})
 	}
 }
@@ -108,9 +100,7 @@ func TestProxy_Agent_Reconnect(t *testing.T) {
 			stopCh := make(chan struct{})
 
 			proxy, cleanup, err := tc.proxyServerFunction()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			defer cleanup()
 
 			cs1 := runAgent(proxy.agent, stopCh)
@@ -119,14 +109,10 @@ func TestProxy_Agent_Reconnect(t *testing.T) {
 			// run test client
 
 			c, err := tc.clientFunction(ctx, proxy.front, server.URL)
-			if err != nil {
-				t.Errorf("error obtaining client: %v", err)
-			}
+			require.NoErrorf(t, err, "obtaining client")
 
 			_, err = clientRequest(c, server.URL)
-			if err != nil {
-				t.Errorf("expected no error on proxy request, got %v", err)
-			}
+			assert.NoErrorf(t, err, "on proxy request")
 			close(stopCh)
 
 			// Wait for the agent to disconnect
@@ -140,15 +126,10 @@ func TestProxy_Agent_Reconnect(t *testing.T) {
 
 			// Proxy requests should work again after agent reconnects
 			c2, err := tc.clientFunction(ctx, proxy.front, server.URL)
-			if err != nil {
-				t.Errorf("error obtaining client: %v", err)
-			}
+			assert.NoErrorf(t, err, "obtaining client")
 
 			_, err = clientRequest(c2, server.URL)
-
-			if err != nil {
-				t.Errorf("expected no error on proxy request, got %v", err)
-			}
+			assert.NoErrorf(t, err, "on proxy request")
 		})
 	}
 }

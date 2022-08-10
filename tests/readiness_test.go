@@ -2,6 +2,8 @@ package tests
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadiness(t *testing.T) {
@@ -9,21 +11,15 @@ func TestReadiness(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, server, cleanup, err := runGRPCProxyServerWithServerCount(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	ready, _ := server.Readiness.Ready()
-	if ready {
-		t.Fatalf("expected not ready")
-	}
+	require.False(t, ready)
 
 	clientset := runAgent(proxy.agent, stopCh)
 	waitForConnectedServerCount(t, 1, clientset)
 
 	ready, _ = server.Readiness.Ready()
-	if !ready {
-		t.Fatalf("expected ready")
-	}
+	require.True(t, ready)
 }

@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -80,9 +81,7 @@ func TestBasicProxy_GRPC(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -90,9 +89,7 @@ func TestBasicProxy_GRPC(t *testing.T) {
 
 	// run test client
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -101,24 +98,16 @@ func TestBasicProxy_GRPC(t *testing.T) {
 	}
 
 	req, err := http.NewRequest("GET", server.URL, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 	req.Close = true
 
 	r, err := c.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
-	if string(data) != "hello" {
-		t.Errorf("expect %v; got %v", "hello", string(data))
-	}
+	assert.EqualValues(t, "hello", data)
 }
 
 func TestProxyHandleDialError_GRPC(t *testing.T) {
@@ -131,9 +120,7 @@ func TestProxyHandleDialError_GRPC(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -141,9 +128,7 @@ func TestProxyHandleDialError_GRPC(t *testing.T) {
 
 	// run test client
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -155,11 +140,7 @@ func TestProxyHandleDialError_GRPC(t *testing.T) {
 	invalidServer.Close()
 
 	_, err = c.Get(url)
-	if err == nil {
-		t.Error("Expected error when destination is unreachable, did not receive error")
-	} else if !strings.Contains(err.Error(), "connection refused") {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	assert.ErrorContains(t, err, "connection refused")
 }
 
 func TestProxyHandle_DoneContext_GRPC(t *testing.T) {
@@ -172,9 +153,7 @@ func TestProxyHandle_DoneContext_GRPC(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -184,11 +163,7 @@ func TestProxyHandle_DoneContext_GRPC(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), -time.Second)
 	defer cancel()
 	_, err = client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err == nil {
-		t.Error("Expected error when context is cancelled, did not receive error")
-	} else if !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	assert.ErrorContains(t, err, "context deadline exceeded")
 }
 
 func TestProxyHandle_SlowContext_GRPC(t *testing.T) {
@@ -202,9 +177,7 @@ func TestProxyHandle_SlowContext_GRPC(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -214,9 +187,7 @@ func TestProxyHandle_SlowContext_GRPC(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	go func() {
 		<-ctx.Done() // Wait for context to time out.
@@ -231,16 +202,10 @@ func TestProxyHandle_SlowContext_GRPC(t *testing.T) {
 
 	// TODO: handle case where there is no context on the request.
 	req, err := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	_, err = c.Do(req)
-	if err == nil {
-		t.Error("Expected error when context is cancelled, did not receive error")
-	} else if !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	assert.ErrorContains(t, err, "context deadline exceeded")
 }
 
 func TestProxyHandle_ContextCancelled_GRPC(t *testing.T) {
@@ -254,9 +219,7 @@ func TestProxyHandle_ContextCancelled_GRPC(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -265,9 +228,7 @@ func TestProxyHandle_ContextCancelled_GRPC(t *testing.T) {
 	// run test client
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	go func() {
 		<-slowServer.requestReceivedCh // Wait for server to receive request.
@@ -283,16 +244,10 @@ func TestProxyHandle_ContextCancelled_GRPC(t *testing.T) {
 
 	// TODO: handle case where there is no context on the request.
 	req, err := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	_, err = c.Do(req)
-	if err == nil {
-		t.Error("Expected error when context is cancelled, did not receive error")
-	} else if !strings.Contains(err.Error(), "context canceled") {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	assert.ErrorContains(t, err, "context canceled")
 }
 
 func TestProxy_LargeResponse(t *testing.T) {
@@ -308,9 +263,7 @@ func TestProxy_LargeResponse(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -318,9 +271,7 @@ func TestProxy_LargeResponse(t *testing.T) {
 
 	// run test client
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -329,24 +280,16 @@ func TestProxy_LargeResponse(t *testing.T) {
 	}
 
 	req, err := http.NewRequest("GET", server.URL, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 	req.Close = true
 
 	r, err := c.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
-	if len(data) != length*chunks {
-		t.Errorf("expect data length %d; got %d", length*chunks, len(data))
-	}
+	assert.Lenf(t, data, length*chunks, "data length")
 }
 
 func TestBasicProxy_HTTPCONN(t *testing.T) {
@@ -359,39 +302,27 @@ func TestBasicProxy_HTTPCONN(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runHTTPConnProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
 	waitForConnectedServerCount(t, 1, clientset)
 
 	conn, err := net.Dial("tcp", proxy.front)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	serverURL, _ := url.Parse(server.URL)
 
 	// Send HTTP-Connect request
 	_, err = fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", serverURL.Host, "127.0.0.1")
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	// Parse the HTTP response for Connect
 	br := bufio.NewReader(conn)
 	res, err := http.ReadResponse(br, nil)
-	if err != nil {
-		t.Errorf("reading HTTP response from CONNECT: %v", err)
-	}
-	if res.StatusCode != 200 {
-		t.Errorf("expect 200; got %d", res.StatusCode)
-	}
-	if br.Buffered() > 0 {
-		t.Error("unexpected extra buffer")
-	}
+	assert.NoErrorf(t, err, "reading HTTP response from CONNECT")
+	assert.EqualValues(t, http.StatusOK, res.StatusCode)
+	assert.Zero(t, br.Buffered(), "unexpected extra buffer")
 
 	dialer := func(network, addr string) (net.Conn, error) {
 		return conn, nil
@@ -404,19 +335,12 @@ func TestBasicProxy_HTTPCONN(t *testing.T) {
 	}
 
 	r, err := c.Get(server.URL)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
-	if string(data) != "hello" {
-		t.Errorf("expect %v; got %v", "hello", string(data))
-	}
-
+	assert.EqualValues(t, "hello", data)
 }
 
 func TestFailedDial_HTTPCONN(t *testing.T) {
@@ -429,36 +353,26 @@ func TestFailedDial_HTTPCONN(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runHTTPConnProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
 	waitForConnectedServerCount(t, 1, clientset)
 
 	conn, err := net.Dial("tcp", proxy.front)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	serverURL, _ := url.Parse(server.URL)
 
 	// Send HTTP-Connect request
 	_, err = fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", serverURL.Host, "127.0.0.1")
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	// Parse the HTTP response for Connect
 	br := bufio.NewReader(conn)
 	res, err := http.ReadResponse(br, nil)
-	if err != nil {
-		t.Errorf("reading HTTP response from CONNECT: %v", err)
-	}
-	if res.StatusCode != 200 {
-		t.Errorf("expect 200; got %d", res.StatusCode)
-	}
+	assert.NoErrorf(t, err, "reading HTTP response from CONNECT")
+	assert.EqualValues(t, http.StatusOK, res.StatusCode)
 
 	dialer := func(network, addr string) (net.Conn, error) {
 		return conn, nil
@@ -471,18 +385,11 @@ func TestFailedDial_HTTPCONN(t *testing.T) {
 	}
 
 	_, err = c.Get(server.URL)
-	if err == nil {
-		t.Error(err)
-	} else if !strings.Contains(err.Error(), "connection reset by peer") {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	assert.ErrorContains(t, err, "connection reset by peer")
 
-	err = wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-		return proxy.getActiveHTTPConnectConns() == 0, nil
-	})
-	if err != nil {
-		t.Errorf("while waiting for connection to be closed: %v", err)
-	}
+	assert.Eventuallyf(t, func() bool {
+		return proxy.getActiveHTTPConnectConns() == 0
+	}, wait.ForeverTestTimeout, 100*time.Millisecond, "waiting for connection to be closed")
 }
 
 func localAddr(addr net.Addr) string {

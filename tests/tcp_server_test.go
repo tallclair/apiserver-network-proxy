@@ -5,6 +5,8 @@ import (
 	"net"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client"
@@ -31,9 +33,7 @@ func echo(conn net.Conn) {
 func TestEchoServer(t *testing.T) {
 	ctx := context.Background()
 	ln, err := net.Listen("tcp", "")
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	go func() {
 		for {
@@ -50,9 +50,7 @@ func TestEchoServer(t *testing.T) {
 	defer close(stopCh)
 
 	proxy, cleanup, err := runGRPCProxyServer()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	clientset := runAgent(proxy.agent, stopCh)
@@ -60,68 +58,38 @@ func TestEchoServer(t *testing.T) {
 
 	// run test client
 	tunnel, err := client.CreateSingleUseGrpcTunnel(ctx, proxy.front, grpc.WithInsecure())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	conn, err := tunnel.DialContext(ctx, "tcp", ln.Addr().String())
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	msg := "1234567890123456789012345"
 	n, err := conn.Write([]byte(msg))
-	if err != nil {
-		t.Error(err)
-	}
-	if n != len(msg) {
-		t.Errorf("expect write %d; got %d", len(msg), n)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, len(msg), n, "written bytes")
 
 	var data [10]byte
 
 	n, err = conn.Read(data[:])
-	if err != nil {
-		t.Error(err)
-	}
-	if string(data[:n]) != msg[:10] {
-		t.Errorf("expect %s; got %s", msg[:10], string(data[:n]))
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, msg[:10], data[:n])
 
 	n, err = conn.Read(data[:])
-	if err != nil {
-		t.Error(err)
-	}
-	if string(data[:n]) != msg[10:20] {
-		t.Errorf("expect %s; got %s", msg[10:20], string(data[:n]))
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, msg[10:20], data[:n])
 
 	msg2 := "1234567"
 	n, err = conn.Write([]byte(msg2))
-	if err != nil {
-		t.Error(err)
-	}
-	if n != len(msg2) {
-		t.Errorf("expect write %d; got %d", len(msg2), n)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, len(msg2), n, "written bytes")
 
 	n, err = conn.Read(data[:])
-	if err != nil {
-		t.Error(err)
-	}
-	if string(data[:n]) != msg[20:] {
-		t.Errorf("expect %s; got %s", msg[20:], string(data[:n]))
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, msg[20:], data[:n])
 
 	n, err = conn.Read(data[:])
-	if err != nil {
-		t.Error(err)
-	}
-	if string(data[:n]) != msg2 {
-		t.Errorf("expect %s; got %s", msg, string(data[:n]))
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, msg2, data[:n])
 
-	if err := conn.Close(); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, conn.Close())
 }
