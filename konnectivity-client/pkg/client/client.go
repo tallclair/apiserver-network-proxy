@@ -285,7 +285,7 @@ func (t *grpcTunnel) DialContext(requestCtx context.Context, protocol, address s
 	select {
 	case res := <-resCh:
 		if res.err != "" {
-			return nil, &dialFailure{res.err, DialFailureEndpoint}
+			return nil, errors.New(res.err)
 		}
 		c.connID = res.connid
 		c.readCh = make(chan []byte, 10)
@@ -295,45 +295,11 @@ func (t *grpcTunnel) DialContext(requestCtx context.Context, protocol, address s
 		t.connsLock.Unlock()
 	case <-time.After(30 * time.Second):
 		klog.V(5).InfoS("Timed out waiting for DialResp", "dialID", random)
-		return nil, &dialFailure{"dial timeout, backstop", DialFailureTimeout}
+		return nil, errors.New("dial timeout, backstop")
 	case <-requestCtx.Done():
 		klog.V(5).InfoS("Context canceled waiting for DialResp", "ctxErr", requestCtx.Err(), "dialID", random)
-		return nil, &dialFailure{"dial timeout, context", DialFailureContext}
+		return nil, errors.New("dial timeout, context")
 	}
 
 	return c, nil
 }
-
-func (t *grpcTunnel) Done() <-chan struct{} {
-	return t.done
-}
-
-func GetDialFailureReason(err error) (isDialFailure bool, reason DialFailureReason) {
-	var df *dialFailure
-	if errors.As(err, df) {
-		return true, df.reason
-	}
-	return false, DialFailureUnknown
-}
-
-type dialFailure struct {
-	msg    string
-	reason DialFailureReason
-}
-
-func (df dialFailure) Error() string {
-	return df.msg
-}
-
-type DialFailureReason string
-
-const (
-	DialFailureUnknown DialFailureReason = "unknown"
-	// DialFailureTimeout indicates the hard 30 second timeout was hit.
-	DialFailureTimeout DialFailureReason = "timeout"
-	// DialFailureContext indicates that the context was cancelled or reached it's deadline before
-	// the dial response was returned.
-	DialFailureContext DialFailureReason = "context"
-	// DialFailureEndpoint indicates that the konnectivity-agent was unable to reach the backend endpoint.
-	DialFailureEndpoint DialFailureReason = "endpoint"
-)
